@@ -31,6 +31,10 @@ from xml.sax import make_parser
 from xml.sax.handler import ContentHandler
 import xml
 
+# Python 2.3.* on gridxn doesn't support this... 
+#import subprocess
+
+
 # NAGIOS Plug-In API return code values
 
 NAGIOS_RET_OK = 0
@@ -38,6 +42,7 @@ NAGIOS_RET_WARNING = 1
 NAGIOS_RET_CRITICAL = 2
 NAGIOS_RET_UNKNOWN = 3
 
+NAGIOS_PERF_DATA_FILE = "/usr/local/nagios/service-perfdata"
 
 def pluginExit(messageString, logString, returnCode):
 
@@ -227,97 +232,110 @@ class PluginCmdLineOpts(PluginObject):
 
 # The "main" code starts here & begins execution here (I guess)
 
-def processNagiosPerf():
+class NagiosPerfDataProcessor(PluginObject):
 
-	finalXML = StringIO()
-	finalXML.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
-	finalXML.write("<ROOT>")
-	fileHandle = open("/usr/local/nagios/var/service-perfdata","r")
-	for line in fileHandle.readlines():
-		# Ignore lines that don't contain the xml header that
-		# our client plugins include as part of the transmission
-		xmlHeaderIndex = line.find("<?xml")
-		if (xmlHeaderIndex == -1):
-			continue
-		else:
-			# This will only print the XML string from the found line
-			#print line[xmlHeaderIndex:]
-			# To find the 'end' of the xml header and effectively 
-			# strip it off so the XML can be aggregated into 1 source
-			tagIndex = line.find("?>") + 2
-			#print line[tagIndex:]	
-			resourceXMLEntry = line[tagIndex:]
-			finalXML.write(resourceXMLEntry)
-	finalXML.write("</ROOT>")
-	return finalXML
+	def __init__(self):
+		PluginObject.__init__(self,self.__class__.__name__)
+		self.parser = make_parser()
+		self.curHandler = ResourceHandler()
+		self.parsedXML = ""
+		self.totalResources = []
+		self.parser.setContentHandler(self.curHandler)
 
-totalResources = []
+
+	def parse(self):
+
+		finalXML = StringIO()
+		finalXML.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
+		finalXML.write("<ROOT>")
+		# TODO ERROR HANDLING & 'service-perfdata' location choice
+		fileHandle = None	
+		try:
+
+			fileHandle = open(NAGIOS_PERF_DATA_FILE,"r")
+			for line in fileHandle.readlines():
+				# Ignore lines that don't contain the xml header that
+				# our client plugins include as part of the transmission
+				xmlHeaderIndex = line.find("<?xml")
+				if (xmlHeaderIndex == -1):
+					continue
+				else:
+					# This will only print the XML string from the found line
+					#print line[xmlHeaderIndex:]
+					# To find the 'end' of the xml header and effectively 
+					# strip it off so the XML can be aggregated into 1 source
+					tagIndex = line.find("?>") + 2
+					#print line[tagIndex:]	
+					resourceXMLEntry = line[tagIndex:]
+					finalXML.write(resourceXMLEntry)
+
+		except IOError:
+			self.logger.error("Unable to open \'"+NAGIOS_PERF_DATA_FILE+"\' for reading!") 			
+			sys.exit(NAGIOS_RET_CRITICAL)
+		#finally:
+		fileHandle.close()
+		
+		finalXML.write("</ROOT>")
+		self.parsedXML=finalXML
+		
+		xml.sax.parseString(finalXML.getvalue(), self.curHandler)
+		self.totalResources = self.curHandler.getResources()
+		return self.totalResources
+# This class implements the SAX API functions 'startElement', 'endElement' and 'characters'
+# It is also intimately tied to the XML format used by the client side plugins
 
 class ResourceHandler(ContentHandler):
-	def __init__(self): #, searchTerm):
-		#self.searchTerm = searchTerm
-		self.resourceEntry ={} #{"resourceLocation":"", "resourceDomain":"", "memorySize":""}
+	def __init__(self): 
+		 
 		self.isResource = False
 		self.isDomain = False
-	#	self.isMemoryElement = False
-
+		self.collectedResources = {}
+		self.repeatedEntry = False
 	def startElement(self,name,attr):
-		
-		#print name
-		#print attr.getValue('ID')
 
 		if name == 'RESOURCE':
-		#	self.resourceEntry[attr.getValue('TYPE')] = {}
 			self.topLevelKey = attr.getValue('LOCATION')
 			self.secondLevelKey = attr.getValue('TYPE')
-			self.resourceEntry[self.topLevelKey]={}
-			self.resourceEntry[self.topLevelKey][self.secondLevelKey] = {}
-		#	self.resourceEntry[self.topLevelIndex]['LOCATION'] = attr.getValue('LOCATION')
-		#	self.resourceEntry['resourceType']	= attr.getValue('TYPE')
+				
+			if(self.topLevelKey not in self.collectedResources.keys()):
+				self.collectedResources[self.topLevelKey] = {}
+			if(self.secondLevelKey not in self.collectedResources[self.topLevelKey].keys()):
+				self.collectedResources[self.topLevelKey][self.secondLevelKey] = {}
 			self.isResource = True
 		elif name == 'DOMAIN':
 			self.isDomain = True
 			self.thirdLevelKey = attr.getValue('ID')
-			#self.resourceEntry[self.topLevelIndex][attr.getValue('ID')]
-			#print attr.getValue('ID')
-			#self.resourceEntry['resourceDomain'] = attr.getValue('ID')
-	#	elif name == 'MEMORY':
-	#		self.resourceType = "MEMORY"
-	#		self.isMemoryElement = True
-	#		self.resourceEntry['memorySize'] = "" 
-		
+			if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
+				self.repeatedEntry = True
 	def characters (self, ch):
-		if self.isDomain == True:
-			self.resourceEntry[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
+		if self.isDomain == True and self.repeatedEntry == False:
+			self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
 		
 	def endElement(self, name):
 		if name == 'RESOURCE':
-			totalResources.append(self.resourceEntry)
-			self.resourceEntry = {}
 			self.isResource = False
 		elif name == 'DOMAIN':
-			#totalResources.append(self.resourceEntry)
-			#self.resourceEntry = {}
 			self.isDomain = False
+			self.repeatedResource = False
+	def getResources(self):
+		return self.collectedResources
 
-	#	elif name == 'MEMORY':
-	#		self.isMemoryElement = False
-		
-#whichResource = "MEMORY SIZE"
-parser = make_parser()
-curHandler = ResourceHandler()
-#testObject = PluginCmdLineOpts()
-#testObject.validate()
+def ping(hostaddress):		
 
-theOutput = processNagiosPerf()
+#	ping = subprocess.Popen(["ping","-c","3",host],stdout = subprocess.PIPE,stderr = subprocess.PIPE)
+#	out, error = ping.communicate()
+#	print out
 
-parser.setContentHandler(curHandler)
+	pinger = os.popen("ping -q -c2 "+hostaddress,"r")
+	while True:	
+		rx = pinger.readline()
+		if not rx:
+			break
+		print rx.strip()
 
-#print(theOutput.getvalue().strip())
-xml.sax.parseString(theOutput.getvalue(), curHandler)
-
-for entry in totalResources:
-	print entry
-#print(theOutput.getvalue().strip())
+	pinger.close()
+generatedData = NagiosPerfDataProcessor().parse()
+ping("www.google.ca")
+for ipaddress in generatedData.keys():
+	print ipaddress
 sys.exit(0)
-#pluginExit(NAGIOS_RET_CRITICAL)
