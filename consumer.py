@@ -97,7 +97,7 @@ class MDSResourceException(Exception):
 
 # Get the XML string from the MDS registry first
 
-SERVER_ADDRESS = "https://gridxn.phys.uvic.ca:8443/wsrf/services/DefaultIndexService"
+SERVER_ADDRESS = "https://gridsn.phys.uvic.ca:8443/wsrf/services/DefaultIndexService"
 XML_ROOT_TAG = "ROOT"
 
 class MDSResourceQuery(Loggable):
