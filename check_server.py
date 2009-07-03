@@ -385,13 +385,19 @@ class HeadNodeVMMPools(PluginObject):
 
         def __call__(self, option, opt_str, value, parser):
 		vmmPools = os.listdir(GLOBUS_LOC+NIMBUS_CONF+NIMBUS_PHYS_CONF)
-		nodeTotals = []
+
+		netPools = os.listdir(GLOBUS_LOC+NIMBUS_CONF+NIMBUS_NET_CONF)
+
 		for pool in vmmPools:
-			#print "LOOPING"
 			# Ignore "dot" file/folders - hidden directories
         		if(pool.startswith(".")):
                 		continue
-        		try:
+	                totalNetPools = {"ANY":0}
+        	        for npool in netPools:
+                	        if(npool.startswith(".")):
+                       	         	continue
+                       		totalNetPools.update({npool:0})
+			try:
                 		# I need to ignore the . hidden dirs
                 		fileHandle = open(GLOBUS_LOC+NIMBUS_CONF+NIMBUS_PHYS_CONF+"/"+pool)
                 		workerNodes = []
@@ -401,36 +407,30 @@ class HeadNodeVMMPools(PluginObject):
 					t = entry.split()
 					workerNodes.append(t)
 				fileHandle.close()
-				nodeTotals.append(workerNodes)
-				subPools = {} 
 				for entry in workerNodes:
 					# IF there is only 2 entries on this given line, that means
 					# the particular workerNode has no specific network pool 
 					# configured, so it's memory count gets added to the "global"
 					# or DEFAULT count
 					keyList = []
-					lookupKey = ""
 					if(len(entry)< 3):
-						lookupKey = "DEFAULT"
+						keyList.append("ANY")
 					else:
 	
 						keyList = entry[2].split(",")
-						if(len(keyList)>1):
-							pass
+					for network in keyList:
+
+						if( network == "*"):
+							totalNetPools["ANY"] += int(entry[1])
+							continue
+						
+						if network in (totalNetPools.keys()):
+							totalNetPools[network] += int(entry[1])			
 						else:
-							lookupKey = keyList[0]	
-						
-					daKeys = subPools.keys()
-					found = False
-					for key in daKeys:
-						if(key == lookupKey):
-							subPools[lookupKey] += int(entry[1])
-							found = True
-					if not found:
-						subPools.update({lookupKey:int(entry[1])})
-						
+							self.logger.error("Erroneous entry in the VMM configuration: "+ network)
+							print "This is an erroneous entry!"
 							
-				print subPools
+				print totalNetPools
 				# This needs to be logged now, and then exported to XML
 
 
@@ -439,7 +439,7 @@ class HeadNodeVMMPools(PluginObject):
 
         		except IOError:
                 		self.logger.error("Error opening vmm-pool: "+GLOBUS_LOC+NIMBUS_CONF+NIMBUS_PHYS_CONF+ pool)
-                		sys.exit(NAGIOS_RET_ERROR)
+                		sys.exit(NAGIOS_RET_CRITICAL)
 
 		#print nodeTotals
 
