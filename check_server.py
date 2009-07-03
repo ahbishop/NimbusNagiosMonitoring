@@ -365,7 +365,7 @@ class HeadNodeVMIPs(PluginObject):
 	def ping(self, hostaddress):
 		#print hostaddress
        
-	        ping = subprocess.Popen(["ping","-c","2",hostaddress],stdout = subprocess.PIPE,stderr = subprocess.PIPE)
+	        ping = subprocess.Popen(["ping","-c","1",hostaddress],stdout = subprocess.PIPE,stderr = subprocess.PIPE)
 	        out, error = ping.communicate()
 	        if(error != ""):
         	        self.logger.error(error)
@@ -387,6 +387,7 @@ class HeadNodeVMMPools(PluginObject):
 		vmmPools = os.listdir(GLOBUS_LOC+NIMBUS_CONF+NIMBUS_PHYS_CONF)
 		nodeTotals = []
 		for pool in vmmPools:
+			#print "LOOPING"
 			# Ignore "dot" file/folders - hidden directories
         		if(pool.startswith(".")):
                 		continue
@@ -401,6 +402,38 @@ class HeadNodeVMMPools(PluginObject):
 					workerNodes.append(t)
 				fileHandle.close()
 				nodeTotals.append(workerNodes)
+				subPools = {} 
+				for entry in workerNodes:
+					# IF there is only 2 entries on this given line, that means
+					# the particular workerNode has no specific network pool 
+					# configured, so it's memory count gets added to the "global"
+					# or DEFAULT count
+					keyList = []
+					lookupKey = ""
+					if(len(entry)< 3):
+						lookupKey = "DEFAULT"
+					else:
+	
+						keyList = entry[2].split(",")
+						if(len(keyList)>1):
+							pass
+						else:
+							lookupKey = keyList[0]	
+						
+					daKeys = subPools.keys()
+					found = False
+					for key in daKeys:
+						if(key == lookupKey):
+							subPools[lookupKey] += int(entry[1])
+							found = True
+					if not found:
+						subPools.update({lookupKey:int(entry[1])})
+						
+							
+				print subPools
+				# This needs to be logged now, and then exported to XML
+
+
                         # Entries will contain a hostname, ramcount and optional network pool
                         # I should aggregate the total memory available to the cluster
 
@@ -408,7 +441,7 @@ class HeadNodeVMMPools(PluginObject):
                 		self.logger.error("Error opening vmm-pool: "+GLOBUS_LOC+NIMBUS_CONF+NIMBUS_PHYS_CONF+ pool)
                 		sys.exit(NAGIOS_RET_ERROR)
 
-		print nodeTotals
+		#print nodeTotals
 
 class HeadNodeNetPools(PluginObject):
 
