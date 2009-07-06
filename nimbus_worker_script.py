@@ -184,7 +184,6 @@ class VMMemory(Virtualized):
         	for vm in self.VMs.values():
                 	self.logger.info(vm.name()+' ; '+self.resourceName+ " ; %d", vm.maxMemory())
 
-		self.logger.error("Shit on a biscuit!!")
 		pluginExit("VM-Memory", self.logString.getvalue(), NAGIOS_RET_OK)
 
 class VMOs(Virtualized):
