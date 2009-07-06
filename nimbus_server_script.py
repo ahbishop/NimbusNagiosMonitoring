@@ -32,6 +32,7 @@ import xml
 import subprocess
 import commands
 import re
+import socket
 # NAGIOS Plug-In API return code values
 
 NAGIOS_RET_OK = 0
@@ -51,17 +52,14 @@ def pluginExit(messageString, logString, returnCode):
 	# The 3rd col lists the "logger lvl", which I'm using to indicate
 	# if it's standard plug-in output or an error
 
-
 	outputString = StringIO()
 	outputString.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
 	
 	# I need to check if ANY 'ERROR' log entries exist. If that's the case
 	# then a different XML string should be formatted and sent out
 
-	#if(logString.find("ERROR") == -1):
-		# No 'ERROR' logging message recorded
-		
-	outputString.write("<RESOURCE>")
+        localIP = (socket.gethostbyaddr( socket.gethostname() ))[2][0]
+
 	lines = logString.splitlines()
 	for line in lines:
         	# If we encounter an 'error' entry in the logger, skip over it
@@ -71,67 +69,20 @@ def pluginExit(messageString, logString, returnCode):
 		logStringEntries = line.split(';')
 		#print logStringEntries
 		
-		outputString.write("<DOMAIN ID=\'"+logStringEntries[3].strip()+"\'>")
-		outputString.write("<"+logStringEntries[4].strip()+">")
-		outputString.write(logStringEntries[5].strip())
-		outputString.write("</"+logStringEntries[4].strip()+">")
-		outputString.write("</DOMAIN>")
-	outputString.write("</RESOURCE>")
+		outputString.write("<RESOURCE LOCATION=\""+localIP+"\" TYPE=\""+messageString+":" +logStringEntries[3].strip()+"\">")
 
-	#else:
-		# So 1 error means the whole plug-in run is "aborted" and no regular data will
-		# be sent back to the server
-	#	lines = logString.splitlines()
-	#	for line in lines:
-			#Does this 'line' contain an 'ERROR' logging msg?
-	#		if line.find("ERROR")!= -1 :
-	#			logStringEntries = line.split('|')
-			
-				# Thus, I need to 'find' the error string in the logString
-	#			outputString.write("<ERROR>")
-	#		outputString.write("[Class]: "+logStringEntries[1]+ " [Details]: "+logStringEntries[3])
-	#		outputString.write("</ERROR>")
+		outputString.write("<ENTRY ID=\""+logStringEntries[4].strip()+"\">")
+		outputString.write(logStringEntries[5].strip())
+		outputString.write("</ENTRY>")
+		outputString.write("</RESOURCE>")
 
 	print messageString+" | "+ outputString.getvalue()
 	sys.exit(returnCode)
-
-# No need to make this a class, since what's teh point of having a ctr
-# that never finishes ctring... I'm going to call sys.exit() at the
-# end, so the whole class/object bit is too heavyweight and uneccessary
-
-#def pluginExit(messageString, logString,returnCode):
-
-        # The idea is, when an "error" occurs and one would normally want to call
-        # sys.exit. INSTEAD: call this function, pass in the object's logger and
-        # the error message and then perform necessary formatting and output
-        # to satisfy the NAGIOS plug-in API
-
-        # The reason for this abstraction is to allow this script to properly
-        # format the logger's error string for communication back to the NAGIOS
-        # server. As a plug-in (in NAGIOS) MUST output some text and generally
-        # follow the NAGIOS plug-in API, this centralizes the "error handling"
-
-        # Since I'm toying with the idea of "presentation layer formatter" classes,
-        # I can then instantiate one of these formatters, parse the log string
-        # (stored in every class/object) and format it, then output it to stdout
-        # (It's a NAGIOS plug-in remember). This outputted text will be sent
-        # back to the monitoring daemon where it will be saved as "performance data"
-        # This performance data will be processed by another script on the server so
-        # the MDS Data Aggregator can then publish it
-
-	
-        # Recall the NAGIOS formatting of 'output' | 'performance data'
- #    	pluginOutput(messageString, logString)
-#	sys.exit(returnCode)
-
 
 class PluginObject:	
 
 	def __init__(self, callingClass):
 		self.logString = StringIO()
-	#	logging.basicConfig(level=logging.DEBUG,  
-	#				format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
-	#			    	stream = self.logString)
 	
 		self.logger = logging.getLogger(callingClass)
 		self.logger.setLevel(logging.INFO)
@@ -187,75 +138,9 @@ class PluginCmdLineOpts(PluginObject):
                         self.logger.info('Plug-in Version #: '+ __VERSION__)
                         print __VERSION__
 
-
-# The "main" code starts here & begins execution here (I guess)
-
 PERFORMANCE_DATA_LOC = "/tmp/service-perfdata"
 TARGET_XML_FILE = "/tmp/mdsresource.xml"
 
-class NagiosPerfDataProcessor(PluginObject):
-
-	def __init__(self):
-		PluginObject.__init__(self,self.__class__.__name__)
-		self.parser = make_parser()
-		self.curHandler = ResourceHandler()
-		self.parsedXML = ""
-		self.totalResources = []
-		self.parser.setContentHandler(self.curHandler)
-
-	def output(self, outputFile):
-		
-		try:
-			fileHandle = open(outputFile, "w")
-
-		except IOError:
-			self.logger.error("Unable to open \'"+outputFile+"\' for writing!")
-			sys.exit(NAGIOS_RET_CRITICAL)
-		
-		fileHandle.write(self.parsedXML.getvalue())
-
-		fileHandle.close()
-
-	def parse(self):
-
-		finalXML = StringIO()
-		finalXML.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
-		finalXML.write("<ROOT>")
-		fileHandle = None	
-		try:
-
-			fileHandle = open(PERFORMANCE_DATA_LOC,"r")
-			for line in fileHandle.readlines():
-				# Ignore lines that don't contain the xml header that
-				# our client plugins include as part of the transmission
-				xmlHeaderIndex = line.find("<?xml")
-				if (xmlHeaderIndex == -1):
-					continue
-				else:
-					# This will only print the XML string from the found line
-					#print line[xmlHeaderIndex:]
-					# To find the 'end' of the xml header and effectively 
-					# strip it off so the XML can be aggregated into 1 source
-					tagIndex = line.find("?>") + 2
-					#print line[tagIndex:]	
-					resourceXMLEntry = line[tagIndex:]
-					finalXML.write(resourceXMLEntry)
-
-		except IOError:
-			self.logger.error("Unable to open \'"+PERFORMANCE_DATA_LOC +"\' for reading!")
-			sys.exit(NAGIOS_RET_CRITICAL)
-		#finally:
-
-		fileHandle.close()
-		
-		finalXML.write("</ROOT>")
-		self.parsedXML=finalXML
-		#print finalXML.getvalue()		
-		xml.sax.parseString(finalXML.getvalue(), self.curHandler)
-		self.totalResources = self.curHandler.getResources()
-		return self.totalResources
-# This class implements the SAX API functions 'startElement', 'endElement' and 'characters'
-# It is also intimately tied to the XML format used by the client side plugins
 
 class ResourceHandler(ContentHandler):
 	def __init__(self): 
@@ -360,7 +245,6 @@ class HeadNodeVMIPs(PluginObject):
 			
 		print derbyIPs
 		return derbyIPs	
-
 		
 	def ping(self, hostaddress):
 		#print hostaddress
@@ -371,6 +255,7 @@ class HeadNodeVMIPs(PluginObject):
         	        self.logger.error(error)
                		return False
         	return True
+
 GLOBUS_LOC = os.environ['GLOBUS_LOCATION']
 #The "NIMBUS_" entries are relative to the GLOBUS_LOC var
 NIMBUS_CONF = "/etc/nimbus/workspace-service"
@@ -382,13 +267,17 @@ class HeadNodeVMMPools(PluginObject):
  	 
 	def __init__(self):
                 PluginObject.__init__(self,self.__class__.__name__)
+		self.resourceName = "VMM-Pools"
 
         def __call__(self, option, opt_str, value, parser):
 		vmmPools = os.listdir(GLOBUS_LOC+NIMBUS_CONF+NIMBUS_PHYS_CONF)
 
 		netPools = os.listdir(GLOBUS_LOC+NIMBUS_CONF+NIMBUS_NET_CONF)
-
+		poolListing = {}
+		
 		for pool in vmmPools:
+			
+			#print "This pool is named: "+pool
 			# Ignore "dot" file/folders - hidden directories
         		if(pool.startswith(".")):
                 		continue
@@ -427,27 +316,25 @@ class HeadNodeVMMPools(PluginObject):
 						if network in (totalNetPools.keys()):
 							totalNetPools[network] += int(entry[1])			
 						else:
-							self.logger.error("Erroneous entry in the VMM configuration: "+ network)
-							print "This is an erroneous entry!"
-							
-				print totalNetPools
-				# This needs to be logged now, and then exported to XML
+							self.logger.error("Erroneous entry in the VMM configuration: "+ network+" - Ignoring")
+							#print "This is an erroneous entry!"
+				poolListing[pool] = totalNetPools
+			except IOError:
+                                self.logger.error("Error opening vmm-pool: "+GLOBUS_LOC+NIMBUS_CONF+NIMBUS_PHYS_CONF+ pool)
+                                sys.exit(NAGIOS_RET_CRITICAL)
 
-
-                        # Entries will contain a hostname, ramcount and optional network pool
-                        # I should aggregate the total memory available to the cluster
-
-        		except IOError:
-                		self.logger.error("Error opening vmm-pool: "+GLOBUS_LOC+NIMBUS_CONF+NIMBUS_PHYS_CONF+ pool)
-                		sys.exit(NAGIOS_RET_CRITICAL)
-
+		for key in poolListing.keys():
+			for entry in totalNetPools.keys():
+				self.logger.info(key+" ; "+entry+" ; "+str(poolListing[key][entry]))			
+			
+		pluginExit(self.resourceName, self.logString.getvalue(), NAGIOS_RET_OK)
 		#print nodeTotals
 
 class HeadNodeNetPools(PluginObject):
 
 	def __init__(self):
 		PluginObject.__init__(self, self.__class__.__name__)
-		self.resourceName = "HN-NetPools"
+		self.resourceName = "NetPools"
 
 
 	def __call__(self, option, opt_str, value, parser):
@@ -482,7 +369,19 @@ class HeadNodeNetPools(PluginObject):
 			except IOError:
 				self.logger.error("Error opening network-pool: "+GLOBUS_LOC+NIMBUS_CONF+NIMBUS_NET_CONF+"/"+pool)
 				sys.exit(NAGIOS_RET_ERROR)
-		print totalNetPools
+		#print totalNetPools
+		
+		for dict in totalNetPools:
+			sillyCount = 0
+			for entry in dict["NETWORK"]:
+				sillyCount +=1
+				#print entry
+			#print sillyCount
+			# The first entry '-' seems silly but I need a placeholder for when the XML
+			# is formatted on pluginExit to maintain homogeneity between the netPools and vmmPools code
+			self.logger.info("-"+";"+dict["ID"]+";"+ str(sillyCount))
+
+		pluginExit(self.resourceName, self.logString.getvalue(), NAGIOS_RET_OK)
 
 testObject = PluginCmdLineOpts()
 testObject.validate()

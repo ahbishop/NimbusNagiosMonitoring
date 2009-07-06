@@ -146,86 +146,11 @@ class PluginObject:
 		self.logger.addHandler(xmlOutputHndlr)
 		self.logger.addHandler(errorOutputHndlr)
 
-class Virtualized(PluginObject):
-
-        # Lookup the available "domains" from libvirt, and other usefull stuff
-        def __init__(self):
-                PluginObject.__init__(self,self.__class__.__name__)
-                #Establish a connection to the local VM Hypervisor (XEN)
-                self.VMConnection  = libvirt.openReadOnly(None)
-                if self.VMConnection == None:
-                        self.logger.error('Unable to open a Read-Only connection to local XEN Hypervisor')
-                        pluginExit("VMConnection",self.logString.getvalue(), NAGIOS_RET_ERROR)
-		
-		# TODO - Remove Domain-0 from this list? I think so....
-
-                self.VMDomainsID = self.VMConnection.listDomainsID()
-                self.VMs={}
-                for id in self.VMDomainsID:
-                        #So, the VMs 'dictionary' stores virDomain (libvirt) objects
-                        self.VMs[id] = (self.VMConnection.lookupByID(id))
-
-
-# I'm using this class like a 'Functor' 
-
-# I thought I'd have to define the __call__ function, but it seems like the 
-# ctr is doing what I need it to for the 'Callback' functionality
-class VMMemory(Virtualized):
-
-	#This ctr's interface is as such to match the 'callback' interface of the optionParser
-	def __init__(self): #,option, opt_str, value, parser):
-		Virtualized.__init__(self)
-		# This isn't strictly necessary....
-		self.resourceName = 'MEMORY'
-
-	def __call__(self, option, opt_str, value, parser):
-        	for vm in self.VMs.values():
-                	self.logger.info(vm.name()+' ; '+self.resourceName+ " ; %d", vm.maxMemory())
-
-		self.logger.error("Shit on a biscuit!!")
-		pluginExit("VM Memory/RAM Query", self.logString.getvalue(), NAGIOS_RET_OK)
-
-
-class PluginCmdLineOpts(PluginObject):
-
-	def __init__(self):
-		PluginObject.__init__(self,self.__class__.__name__)
-		# Parse command-line options.
-		parser = OptionParser()
-
-		#parser.add_option("--VMmem", action="callback", callback=VMMemory())
-		#parser.add_option("--VMos", action="callback", callback=
-
-		self.parser = parser
-
-	# This method is also responsible for "picking" what resource to monitor via the appropriate
-	# command line switches (which I need to define). I don't want a single, monolithic script
-	# running for ALL the resources, since this waters down NAGIOS's monitoring capabilities
-	# (since that would make only a single resource to monitor)
-	# Instead, this one script will be executed multiple time with different commandline options
-	# to facilitate the monitoring of the different resources independant of one another
-
-	# Maybe I'll go back to my idea of a "dictionary of function pointers" so that the command line
-	# switch can act as a key into the function map, so that the appropriate function can get
-	# returned after a call to this method (and then one can execute said function)
-	def validate(self):
-
-		# Parse the command line arguments and store them in 'options'
-		(options, args) = self.parser.parse_args()
-
-#		if not options.version:
-#    			self.logger.info('Plug-in Version #: '+ __VERSION__)
-
-		# Check options for validity
-#		verbose = int(options.verbosity)
-
-
-#		if (verbose < 0) or (verbose > 3):
-#			self.logger.error('Invalid verbosity option (Not in range 0-3)')
-#			pluginExit(self,NAGIOS_RET_UNKNOWN)
-
 
 # The "main" code starts here & begins execution here (I guess)
+
+PERFORMANCE_DATA_LOC = "/tmp/service-perfdata"
+TARGET_XML_FILE = "/tmp/mdsresource.xml"
 
 class NagiosPerfDataProcessor(PluginObject):
 
@@ -237,6 +162,18 @@ class NagiosPerfDataProcessor(PluginObject):
 		self.totalResources = []
 		self.parser.setContentHandler(self.curHandler)
 
+	def output(self, outputFile):
+		
+		try:
+			fileHandle = open(outputFile, "w")
+
+		except IOError:
+			self.logger.error("Unable to open \'"+outputFile+"\' for writing!")
+			sys.exit(-1)
+		
+		fileHandle.write(self.parsedXML.getvalue())
+
+		fileHandle.close()
 
 	def parse(self):
 
@@ -247,7 +184,7 @@ class NagiosPerfDataProcessor(PluginObject):
 		fileHandle = None	
 		try:
 
-			fileHandle = open("/usr/local/nagios/var/service-perfdata","r")
+			fileHandle = open(PERFORMANCE_DATA_LOC,"r")
 			for line in fileHandle.readlines():
 				# Ignore lines that don't contain the xml header that
 				# our client plugins include as part of the transmission
@@ -265,13 +202,15 @@ class NagiosPerfDataProcessor(PluginObject):
 					finalXML.write(resourceXMLEntry)
 
 		except IOError:
-			self.logger.error("Unable to open \'/usr/local/nagios/var/service-perfdata\' for reading!") 			
+			self.logger.error("Unable to open \'"+PERFORMANCE_DATA_LOC +"\' for reading!")
+			sys.exit(-1)
 		#finally:
+
 		fileHandle.close()
 		
 		finalXML.write("</ROOT>")
 		self.parsedXML=finalXML
-		print finalXML.getvalue()		
+		#print finalXML.getvalue()		
 		xml.sax.parseString(finalXML.getvalue(), self.curHandler)
 		self.totalResources = self.curHandler.getResources()
 		return self.totalResources
@@ -315,5 +254,8 @@ class ResourceHandler(ContentHandler):
 		return self.collectedResources
 		
 
-print NagiosPerfDataProcessor().parse()
+myProc = NagiosPerfDataProcessor()
+myProc.parse()
+myProc.output(TARGET_XML_FILE)
+
 sys.exit(0)
