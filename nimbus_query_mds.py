@@ -50,40 +50,52 @@ class Loggable:
 
 class ResourceHandler(ContentHandler):
 	def __init__(self): 
-		 
-		self.isResource = False
-		self.isDomain = False
-		self.collectedResources = {}
-		self.repeatedEntry = False
-	def startElement(self,name,attr):
+                self.isResource = False
+                self.isDomain = False
+                self.isEntry = False
+                self.collectedResources = {}
+                self.repeatedResource = False
+        def startElement(self,name,attr):
 
-		if name == 'RESOURCE':
-			self.topLevelKey = attr.getValue('LOCATION')
-			self.secondLevelKey = attr.getValue('TYPE')
-				
-			if(self.topLevelKey not in self.collectedResources.keys()):
-				self.collectedResources[self.topLevelKey] = {}
-			if(self.secondLevelKey not in self.collectedResources[self.topLevelKey].keys()):
-				self.collectedResources[self.topLevelKey][self.secondLevelKey] = {}
-			self.isResource = True
-		elif name == 'DOMAIN':
-			self.isDomain = True
-			self.thirdLevelKey = attr.getValue('ID')
-			if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
-				self.repeatedEntry = True
-	def characters (self, ch):
-		if self.isDomain == True and self.repeatedEntry == False:
-			self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
-		
-	def endElement(self, name):
-		if name == 'RESOURCE':
-			self.isResource = False
-		elif name == 'DOMAIN':
-			self.isDomain = False
-			self.repeatedResource = False
-	def getResources(self):
-		return self.collectedResources
-		
+                if name == 'RESOURCE':
+                        self.topLevelKey = attr.getValue('LOCATION')
+                        self.secondLevelKey = attr.getValue('TYPE')
+
+                        if(self.topLevelKey not in self.collectedResources.keys()):
+                                self.collectedResources[self.topLevelKey] = {}
+                        if(self.secondLevelKey not in self.collectedResources[self.topLevelKey].keys()):
+                                self.collectedResources[self.topLevelKey][self.secondLevelKey] = {}
+                        self.isResource = True
+                elif name == 'ENTRY':
+                        self.isEntry = True
+                        self.thirdLevelKey = attr.getValue('ID')
+                        if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
+                                self.repeatedResource = True
+                elif name == 'DOMAIN':
+                        self.isDomain = True
+                        self.thirdLevelKey = attr.getValue('ID')
+                        if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
+                                self.repeatedResource = True
+
+        def characters (self, ch):
+                if (self.isDomain == True and self.repeatedResource == False):
+                        self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
+                if (self.isEntry == True and self.repeatedResource == False):
+                        self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
+
+        def endElement(self, name):
+                if name == 'RESOURCE':
+                        self.isResource = False
+                elif name == 'ENTRY':
+                        self.isEntry = False
+                        self.repeatedResource = False
+                elif name == 'DOMAIN':
+                        self.isDomain = False
+                        self.repeatedResource = False
+        def getResources(self):
+                return self.collectedResources
+
+	
 
 
 class MDSResourceException(Exception):

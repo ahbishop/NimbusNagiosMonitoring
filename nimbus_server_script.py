@@ -1,4 +1,4 @@
-#!/usr/bin/python -u
+#!/usr/bin/python
 
 """*
  * Copyright 2009 University of Victoria
@@ -54,9 +54,6 @@ def pluginExit(messageString, logString, returnCode):
 
 	outputString = StringIO()
 	outputString.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
-	
-	# I need to check if ANY 'ERROR' log entries exist. If that's the case
-	# then a different XML string should be formatted and sent out
 
         localIP = (socket.gethostbyaddr( socket.gethostname() ))[2][0]
 
@@ -76,7 +73,7 @@ def pluginExit(messageString, logString, returnCode):
 		outputString.write("</ENTRY>")
 		outputString.write("</RESOURCE>")
 
-	print messageString+" | "+ outputString.getvalue()
+	sys.stdout.write(messageString+" | "+ outputString.getvalue()+"\n")
 	sys.exit(returnCode)
 
 class PluginObject:	
@@ -106,7 +103,7 @@ class PluginCmdLineOpts(PluginObject):
                 # Parse command-line options.
                 parser = OptionParser()
 
-
+		#sys.stdout.write( "This should show up\n")
                 #The following options are parsed to conform with Nagios Plug-In "standard practices"
 
                 parser.add_option("-V","--version",dest="version", \
@@ -130,7 +127,7 @@ class PluginCmdLineOpts(PluginObject):
         # to facilitate the monitoring of the different resources independant of one another
 
         def validate(self):
-
+		#print "Validating the COmmand Line Path"
                 # Parse the command line arguments and store them in 'options'
                 (options, args) = self.parser.parse_args()
 
@@ -138,8 +135,8 @@ class PluginCmdLineOpts(PluginObject):
                         self.logger.info('Plug-in Version #: '+ __VERSION__)
                         print __VERSION__
 
-PERFORMANCE_DATA_LOC = "/tmp/service-perfdata"
-TARGET_XML_FILE = "/tmp/mdsresource.xml"
+#PERFORMANCE_DATA_LOC = "/tmp/service-perfdata"
+#TARGET_XML_FILE = "/tmp/mdsresource.xml"
 
 
 class ResourceHandler(ContentHandler):
@@ -204,8 +201,8 @@ class ResourceHandler(ContentHandler):
 #myProc = NagiosPerfDataProcessor()
 #parsedData = myProc.parse()
 
-IJ_LOCATION = "/opt/sun/javadb/bin/ij"
-SQL_IP_SCRIPT = "derbyUsedIPs.sql"
+#IJ_LOCATION = "/opt/sun/javadb/bin/ij"
+#SQL_IP_SCRIPT = "derbyUsedIPs.sql"
 class HeadNodeVMIPs(PluginObject):
 
 	def __init__(self):
@@ -217,6 +214,10 @@ class HeadNodeVMIPs(PluginObject):
 	
 	#def __call__(self):
 		print "I was called"
+		IJ_LOCATION = "/opt/sun/javadb/bin/ij"
+		SQL_IP_SCRIPT = "derbyUsedIPs.sql"
+
+
 		query = IJ_LOCATION+ " "+SQL_IP_SCRIPT
 		status, output = commands.getstatusoutput(query)
 		#print status
@@ -228,7 +229,7 @@ class HeadNodeVMIPs(PluginObject):
 			myRe = patt.search(line)
 			if(myRe):
 				derbyIPs.append({line.strip(): False})	
-		
+		# So now I know what IPs should be reachable	
 		for remoteVM in derbyIPs:
 			#pass
 			# There should be only 1 key in the dictionary structure
@@ -241,8 +242,14 @@ class HeadNodeVMIPs(PluginObject):
 			# Again, there should be only 1 'value' for a given key
 			# and the 'value' is a True/False boolean
 			if not (foundVM.values()):
-				self.logger.error("Unable to reach VM!")
-			
+				self.logger.error("Unable to reach VM via PING - "+foundVM)
+		# OK, so now are their reachable VMs that should be terminated?
+
+		SQL_RUNNING_VMS_SCRIPT = "derbyRunningVMs.sql"
+		query = IJ_LOCATION + " " + SQL_RUNNING_VMS_SCRIPT
+		status, output = commands.getstatusoutput(query)
+		for line in output.split('|'):
+			print line
 		print derbyIPs
 		return derbyIPs	
 		
@@ -256,11 +263,11 @@ class HeadNodeVMIPs(PluginObject):
                		return False
         	return True
 
-GLOBUS_LOC = os.environ['GLOBUS_LOCATION']
+#GLOBUS_LOC = os.environ['GLOBUS_LOCATION']
 #The "NIMBUS_" entries are relative to the GLOBUS_LOC var
-NIMBUS_CONF = "/etc/nimbus/workspace-service"
-NIMBUS_NET_CONF = "/network-pools"
-NIMBUS_PHYS_CONF = "/vmm-pools"
+#NIMBUS_CONF = "/etc/nimbus/workspace-service"
+#NIMBUS_NET_CONF = "/network-pools"
+#NIMBUS_PHYS_CONF = "/vmm-pools"
 
 
 class HeadNodeVMMPools(PluginObject):
@@ -270,11 +277,17 @@ class HeadNodeVMMPools(PluginObject):
 		self.resourceName = "VMM-Pools"
 
         def __call__(self, option, opt_str, value, parser):
+		GLOBUS_LOC = "/usr/local/globus-4.0.8" #os.environ['GLOBUS_LOCATION']
+		#The "NIMBUS_" entries are relative to the GLOBUS_LOC var
+		NIMBUS_CONF = "/etc/nimbus/workspace-service"
+		NIMBUS_NET_CONF = "/network-pools"
+		NIMBUS_PHYS_CONF = "/vmm-pools"
+		#print "pre vmmpool listdir"
 		vmmPools = os.listdir(GLOBUS_LOC+NIMBUS_CONF+NIMBUS_PHYS_CONF)
 
 		netPools = os.listdir(GLOBUS_LOC+NIMBUS_CONF+NIMBUS_NET_CONF)
 		poolListing = {}
-		
+		#print "Looping VMMPools"		
 		for pool in vmmPools:
 			
 			#print "This pool is named: "+pool
@@ -320,7 +333,7 @@ class HeadNodeVMMPools(PluginObject):
 							#print "This is an erroneous entry!"
 				poolListing[pool] = totalNetPools
 			except IOError:
-                                self.logger.error("Error opening vmm-pool: "+GLOBUS_LOC+NIMBUS_CONF+NIMBUS_PHYS_CONF+ pool)
+                                self.logger.error("Error opening VMM-pool: "+GLOBUS_LOC+NIMBUS_CONF+NIMBUS_PHYS_CONF+ pool)
                                 sys.exit(NAGIOS_RET_CRITICAL)
 
 		for key in poolListing.keys():
@@ -338,9 +351,14 @@ class HeadNodeNetPools(PluginObject):
 
 
 	def __call__(self, option, opt_str, value, parser):
+		GLOBUS_LOC = "/usr/local/globus-4.0.8" #os.environ['GLOBUS_LOCATION']
+		NIMBUS_CONF = "/etc/nimbus/workspace-service"
+                NIMBUS_NET_CONF = "/network-pools"
+                NIMBUS_PHYS_CONF = "/vmm-pools"
+		#print "Pre netpool listdir"
 		netPools = os.listdir(GLOBUS_LOC+NIMBUS_CONF+NIMBUS_NET_CONF)
 		totalNetPools = []
-	
+		#print "Looping Netpools"	
 		for pool in netPools:
 
 			if(pool.startswith(".")):
@@ -382,8 +400,9 @@ class HeadNodeNetPools(PluginObject):
 			self.logger.info("-"+";"+dict["ID"]+";"+ str(sillyCount))
 
 		pluginExit(self.resourceName, self.logString.getvalue(), NAGIOS_RET_OK)
+if __name__ == '__main__':
+	testObject = PluginCmdLineOpts()
+	testObject.validate()
 
-testObject = PluginCmdLineOpts()
-testObject.validate()
-
-sys.exit(NAGIOS_RET_OK)
+# This sys.exit call should NEVER be reached under normal circumstances, or any....
+sys.exit(NAGIOS_RET_CRITICAL) 

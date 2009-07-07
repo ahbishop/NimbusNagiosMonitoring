@@ -213,6 +213,7 @@ class NagiosPerfDataProcessor(PluginObject):
 		#print finalXML.getvalue()		
 		xml.sax.parseString(finalXML.getvalue(), self.curHandler)
 		self.totalResources = self.curHandler.getResources()
+		print self.totalResources
 		return self.totalResources
 # This class implements the SAX API functions 'startElement', 'endElement' and 'characters'
 # It is also intimately tied to the XML format used by the client side plugins
@@ -222,8 +223,9 @@ class ResourceHandler(ContentHandler):
 		 
 		self.isResource = False
 		self.isDomain = False
+		self.isEntry = False
 		self.collectedResources = {}
-		self.repeatedEntry = False
+		self.repeatedResource = False
 	def startElement(self,name,attr):
 
 		if name == 'RESOURCE':
@@ -235,18 +237,29 @@ class ResourceHandler(ContentHandler):
 			if(self.secondLevelKey not in self.collectedResources[self.topLevelKey].keys()):
 				self.collectedResources[self.topLevelKey][self.secondLevelKey] = {}
 			self.isResource = True
+		elif name == 'ENTRY':
+			self.isEntry = True
+			self.thirdLevelKey = attr.getValue('ID')
+			if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
+				self.repeatedResource = True
 		elif name == 'DOMAIN':
 			self.isDomain = True
 			self.thirdLevelKey = attr.getValue('ID')
 			if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
-				self.repeatedEntry = True
+				self.repeatedResource = True
+	
 	def characters (self, ch):
-		if self.isDomain == True and self.repeatedEntry == False:
+		if (self.isDomain == True and self.repeatedResource == False):
 			self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
-		
+		if (self.isEntry == True and self.repeatedResource == False):
+			self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
+	
 	def endElement(self, name):
 		if name == 'RESOURCE':
 			self.isResource = False
+		elif name == 'ENTRY':
+			self.isEntry = False
+			self.repeatedResource = False
 		elif name == 'DOMAIN':
 			self.isDomain = False
 			self.repeatedResource = False
