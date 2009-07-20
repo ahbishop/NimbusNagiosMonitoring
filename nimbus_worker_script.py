@@ -55,8 +55,6 @@ def pluginExit(messageString, logString, returnCode):
 	# I need to check if ANY 'ERROR' log entries exist. If that's the case
 	# then a different XML string should be formatted and sent out
 
-	#if(logString.find("ERROR") == -1):
-		# No 'ERROR' logging message recorded
 	# TODO - Add error handling!
 	localIP = (socket.gethostbyaddr( socket.gethostname() ))[2][0]
 	
@@ -69,27 +67,13 @@ def pluginExit(messageString, logString, returnCode):
 			returnCode = NAGIOS_RET_WARNING
 			continue
 		logStringEntries = line.split(';')
-		#print logStringEntries
 		
-		outputString.write("<DOMAIN ID=\""+logStringEntries[3].strip()+"\">")
+		outputString.write("<ENTRY ID=\""+logStringEntries[3].strip()+"\">")
 
 		outputString.write(logStringEntries[5].strip())
-		outputString.write("</DOMAIN>")
+		outputString.write("</ENTRY>")
 	outputString.write("</RESOURCE>")
 
-	#else:
-		# So 1 error means the whole plug-in run is "aborted" and no regular data will
-		# be sent back to the server
-	#	lines = logString.splitlines()
-	#	for line in lines:
-			#Does this 'line' contain an 'ERROR' logging msg?
-	#		if line.find("ERROR")!= -1 :
-	#			logStringEntries = line.split('|')
-			
-				# Thus, I need to 'find' the error string in the logString
-	#			outputString.write("<ERROR>")
-	#		outputString.write("[Class]: "+logStringEntries[1]+ " [Details]: "+logStringEntries[3])
-	#		outputString.write("</ERROR>")
 
 	print messageString+" | "+ outputString.getvalue()
 	sys.exit(returnCode)
@@ -155,7 +139,7 @@ class Virtualized(PluginObject):
                 self.VMConnection  = libvirt.openReadOnly(None)
                 if self.VMConnection == None:
                         self.logger.error('Unable to open a Read-Only connection to local XEN Hypervisor')
-                        pluginExit("VMConnection",self.logString.getvalue(), NAGIOS_RET_ERROR)
+                        pluginExit("Virtualized - Base Class",self.logString.getvalue(), NAGIOS_RET_ERROR)
 		
 		# TODO - Remove Domain-0 from this list? I think so....
 
@@ -177,14 +161,66 @@ class VMMemory(Virtualized):
 	#This ctr's interface is as such to match the 'callback' interface of the optionParser
 	def __init__(self): #,option, opt_str, value, parser):
 		Virtualized.__init__(self)
-		# This isn't strictly necessary....
-		self.resourceName = 'VM-MEMORY'
+		self.resourceName = 'VM-Memory'
 
 	def __call__(self, option, opt_str, value, parser):
         	for vm in self.VMs.values():
                 	self.logger.info(vm.name()+' ; '+self.resourceName+ " ; %d", vm.maxMemory())
 
-		pluginExit("VM-Memory", self.logString.getvalue(), NAGIOS_RET_OK)
+		pluginExit(self.resourceName, self.logString.getvalue(), NAGIOS_RET_OK)
+
+class VMVirt(Virtualized):
+
+	def __init__(self):
+		Virtualized.__init__(self)
+		self.resourceName = 'VM-Virtualization'
+
+	def __call__(self,option, opt_str, value,parser):
+		#for vm in self.VMs.values():
+		self.logger.info(self.VMConnection.getHostname()+";"+self.resourceName+";"+self.VMConnection.getType())
+
+		pluginExit(self.resourceName, self.logString.getvalue(), NAGIOS_RET_OK)
+
+class VMCpuCores(Virtualized):
+
+	def __init__(self):
+		Virtualized.__init__(self)
+		self.resourceName = 'VM-CPUCores'
+
+	def __call__(self, option, opt_str, value, parser):
+
+		tempRes = self.VMConnection.getInfo()
+		self.logger.info(self.VMConnection.getHostname()+';'+self.resourceName+';'+str(tempRes[6]))
+		pluginExit(self.resourceName, self.logString.getvalue(), NAGIOS_RET_OK)		
+
+class VMCpuFreq(Virtualized):
+
+	
+	def __init__(self):
+		Virtualized.__init__(self)
+		self.resourceName = 'VM-CPUFreq'
+
+	def __call__(self,option, opt_str, value, parser):
+
+		tempRes = self.VMConnection.getInfo()
+		self.logger.info(self.VMConnection.getHostname()+';'+self.resourceName+';'+str(tempRes[3]))	   
+		pluginExit(self.resourceName, self.logString.getvalue(), NAGIOS_RET_OK)
+
+ARCH_MAP = {    "i686"  : "x86",
+                        "i386"  : "x86",
+                        "x86_64":"x86_64"}
+           # This entry seems stupid but it provides a uniform interface
+
+class VMCpuArch(Virtualized):
+
+	def __init__(self):
+		Virtualized.__init__(self)
+		self.resourceName = 'VM-CPUArch'
+
+	def __call__(self, option, opt_str, value,parser):
+		tempRes = self.VMConnection.getInfo()
+		self.logger.info(self.VMConnection.getHostname()+';'+self.resourceName+";"+ARCH_MAP[tempRes[0]])
+		pluginExit(self.resourceName, self.logString.getvalue(), NAGIOS_RET_OK)
 
 class VMOs(Virtualized):
 
@@ -196,7 +232,7 @@ class VMOs(Virtualized):
 		for vm in self.VMs.values():
 			self.logger.info(vm.name()+' ; '+self.resourceName+ " ; "+ vm.OSType())
 
-		pluginExit("VM-OS", self.logString.getvalue(), NAGIOS_RET_OK)
+		pluginExit(self.resourceName, self.logString.getvalue(), NAGIOS_RET_OK)
 		
 
 class PluginCmdLineOpts(PluginObject):
@@ -206,19 +242,17 @@ class PluginCmdLineOpts(PluginObject):
 		# Parse command-line options.
 		parser = OptionParser()
 
-
 		#The following options are parsed to conform with Nagios Plug-In "standard practices"
-
 		parser.add_option("-V","--version",dest="version", \
 			action="store_false", help="Diplay version information",default=True)
-		parser.add_option("-v","--verbose",dest="verbosity",help="Set verbosity level (0-3)",default=0)
-		#parser.add
-		
+		#parser.add_option("-v","--verbose",dest="verbosity",help="Set verbosity level (0-3)",default=0)
 
 		parser.add_option("--VMmem", action="callback", callback=VMMemory())
 		parser.add_option("--VMos", action="callback", callback=VMOs())
-	#	parser.add_option("--VM		
-
+		parser.add_option("--VMcpuarch", action="callback", callback=VMCpuArch())		
+		parser.add_option("--VMvirt", action="callback", callback=VMVirt())
+		parser.add_option("--VMcpufreq", action="callback", callback=VMCpuFreq())
+		parser.add_option("--VMcpucores", action="callback", callback=VMCpuCores())
 
 		self.parser = parser
 
@@ -240,9 +274,9 @@ class PluginCmdLineOpts(PluginObject):
 		
 
 		# Check options for validity
-		verbose = int(options.verbosity)
-		if (verbose < 0) or (verbose > 3):
-			self.logger.error("Invalid verbosity option (Not in range 0-3)")
+		#verbose = int(options.verbosity)
+		#if (verbose < 0) or (verbose > 3):
+		#	self.logger.error("Invalid verbosity option (Not in range 0-3)")
 			#pluginExit("Verbosity","",NAGIOS_RET_UNKNOWN)
 
 

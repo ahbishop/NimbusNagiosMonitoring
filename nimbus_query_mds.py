@@ -51,7 +51,7 @@ class Loggable:
 class ResourceHandler(ContentHandler):
 	def __init__(self): 
                 self.isResource = False
-                self.isDomain = False
+ #               self.isDomain = False
                 self.isEntry = False
                 self.collectedResources = {}
                 self.repeatedResource = False
@@ -71,15 +71,15 @@ class ResourceHandler(ContentHandler):
                         self.thirdLevelKey = attr.getValue('ID')
                         if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
                                 self.repeatedResource = True
-                elif name == 'DOMAIN':
-                        self.isDomain = True
-                        self.thirdLevelKey = attr.getValue('ID')
-                        if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
-                                self.repeatedResource = True
+    #            elif name == 'DOMAIN':
+     #                   self.isDomain = True
+      #                  self.thirdLevelKey = attr.getValue('ID')
+       #                 if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
+        #                        self.repeatedResource = True
 
         def characters (self, ch):
-                if (self.isDomain == True and self.repeatedResource == False):
-                        self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
+  #              if (self.isDomain == True and self.repeatedResource == False):
+   #                     self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
                 if (self.isEntry == True and self.repeatedResource == False):
                         self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
 
@@ -89,9 +89,9 @@ class ResourceHandler(ContentHandler):
                 elif name == 'ENTRY':
                         self.isEntry = False
                         self.repeatedResource = False
-                elif name == 'DOMAIN':
-                        self.isDomain = False
-                        self.repeatedResource = False
+#                elif name == 'DOMAIN':
+ #                       self.isDomain = False
+ #                       self.repeatedResource = False
         def getResources(self):
                 return self.collectedResources
 
@@ -156,7 +156,8 @@ class MDSResourceQuery(Loggable):
 		xmlHandler = ResourceHandler()
 
 		try:
-			xml.sax.parseString(retrievedXML, xmlHandler)
+			#print (retrievedXML)
+			xml.sax.parseString(retrievedXML.strip(), xmlHandler)
 		except xml.sax.SAXException, e:
 			self.logger.error("Failed to parse retrieved XML: "+e.getMessage())	
 			#sys.exit(1)
