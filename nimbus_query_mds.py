@@ -152,11 +152,19 @@ class MDSResourceQuery(Loggable):
 		#except ValueError:
 		#	self.logger.error("ValueError occured performing subprocess.Popen() - Check arguments")
 		#	sys.exit(1)
+		
+		# Check to see if there was any results returned from the MDS
+		# When the aggregator is unregistered, the query returns the string:
+		# "Query did not return any results."
+		# Thus, 'Query' is used for the 'find' call as it is the first word in the sentence 
+		# (this isn't a requirement, any word could have been used really)
+		if(retrievedXML.find("Query") != -1):
+			print "Should be nothing returning from the MDS"
+			raise MDSResourceException("No Resources in MDS Registry")
 
 		xmlHandler = ResourceHandler()
 
 		try:
-			#print (retrievedXML)
 			xml.sax.parseString(retrievedXML.strip(), xmlHandler)
 		except xml.sax.SAXException, e:
 			self.logger.error("Failed to parse retrieved XML: "+e.getMessage())	

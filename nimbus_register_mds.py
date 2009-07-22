@@ -72,14 +72,16 @@ def shat():
 		
 			argString = SERVER_ADDRESS + " " + REG_FILE 
 			try:
-				process = subprocess.Popen("/usr/local/globus-4.0.8/bin/mds-servicegroup-add -s "+argString , shell=True,stderr=PIPE, stdout=PIPE)
+				process = subprocess.Popen("$GLOBUS_LOCATION/bin/mds-servicegroup-add -s "+argString , shell=True,stderr=PIPE, stdout=PIPE)
                			#sts = os.waitpid(process.pid, 0
 				#time.sleep(7)
 				#print process.poll()
-				
+								
 				output = process.communicate()
-				print >>sys.stdout, output[1], output[0]
-				print "Sup sup?"
+				# The above statement never finishes executing (such is the nature of mds-servicegroup-add)
+				#print >>sys.stdout, output[1], output[0]
+				# This code snippet exists in case of some sort of error in the sub-process
+				# Graceful cleanup (removing a defunct pid file) is desired
 				if(os.path.exists(PID_PATH)):
 					os.remove(PID_PATH)
 			except OSError, e:
