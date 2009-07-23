@@ -33,6 +33,7 @@ import subprocess
 import commands
 import re
 import socket
+import time
 # NAGIOS Plug-In API return code values
 
 NAGIOS_RET_OK = 0
@@ -206,6 +207,7 @@ class ResourceHandler(ContentHandler):
 class HeadNodeVMIPs(PluginObject):
 
 	def __init__(self):
+		self.resourceName = "DerbyDB-Consistency"
 		PluginObject.__init__(self,self.__class__.__name__)
 	
 	def __call__(self, option, opt_str, value, parser):
@@ -213,7 +215,7 @@ class HeadNodeVMIPs(PluginObject):
 	#	__call__()
 	
 	#def __call__(self):
-		print "I was called"
+		#print "I was called"
 		IJ_LOCATION = "/opt/sun/javadb/bin/ij"
 		SQL_IP_SCRIPT = "derbyUsedIPs.sql"
 
@@ -248,10 +250,51 @@ class HeadNodeVMIPs(PluginObject):
 		SQL_RUNNING_VMS_SCRIPT = "derbyRunningVMs.sql"
 		query = IJ_LOCATION + " " + SQL_RUNNING_VMS_SCRIPT
 		status, output = commands.getstatusoutput(query)
-		for line in output.split('|'):
-			print line
-		print derbyIPs
-		return derbyIPs	
+		patt = re.compile(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
+		ijOutput = output.split()
+		counter = 0
+		VMs = []
+		for line in ijOutput:
+
+		        myRe = patt.search(line)
+       			if(myRe):
+                		network = line.split('|')[0]
+                		networkEntries = network.split(';')
+                		# The networking info and termination time share the same line in the returned results from the IJ query
+               		 	# so an array is returned by the split, and the term time is in the second entry
+
+
+                		# NOTE - All the times stored in the database have 3 additional #'s of precision compared to the Unix
+               			# time command of 'date +%s', which gives us the time since epoch
+               	 		# Thus, the trailing 3 numerals of all time values are stripped off
+
+                		termTime = (line.split('|')[1])[:-3]
+                		# Both 'StartTime' and 'ShutdownTime' have a pesky pipe '|' char preceding the number that needs to be
+                		# stripped off
+
+		                startTime = ((ijOutput[counter+1])[1:len(ijOutput[counter+1])])[:-3]
+
+		                shutdownTime = ((ijOutput[counter+2])[1:len(ijOutput[counter+2])])[:-3]
+				
+				# TODO There's some sort of black magic regarding 'states' too that I have NO DETAILS on
+
+		                VMs.append({"IP":networkEntries[5], "TermTime":termTime,"StartTime":startTime, "ShutdownTime":shutdownTime})
+        		counter += 1
+		currentTime = int(time.time())
+		for entry in VMs:
+			if(currentTime > entry["ShutdownTime"] ):
+				# Need to ping the VM to see if it's still alive
+				if(self.ping(entry["IP"])):
+					self.logger.error("VM at IP address: "+entry["IP"]+" is alive and shouldn't be!")
+		#print VMs
+		
+		#print derbyIPs
+		#self.logger.info("Consistency check of DerbyDB")
+		print "Consistency check of DerbyDB"
+		sys.exit(NAGIOS_RET_OK)
+		#pluginExit(self.resourceName, self.logString.getvalue(), NAGIOS_RET_OK)
+
+#		return derbyIPs	
 		
 	def ping(self, hostaddress):
 		#print hostaddress
