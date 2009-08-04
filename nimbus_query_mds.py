@@ -51,8 +51,8 @@ class Loggable:
 class ResourceHandler(ContentHandler):
 	def __init__(self): 
                 self.isResource = False
- #               self.isDomain = False
                 self.isEntry = False
+	#	self.initializeList = True
                 self.collectedResources = {}
                 self.repeatedResource = False
         def startElement(self,name,attr):
@@ -69,33 +69,30 @@ class ResourceHandler(ContentHandler):
                 elif name == 'ENTRY':
                         self.isEntry = True
                         self.thirdLevelKey = attr.getValue('ID')
-                        if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
+			identifiers = self.thirdLevelKey.split(":")
+               #         if(self.initializeList == True):
+#			self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = []	
+	#			if(identifiers > 1):
+	#				self.initializeList = False
+			
+			if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
                                 self.repeatedResource = True
-    #            elif name == 'DOMAIN':
-     #                   self.isDomain = True
-      #                  self.thirdLevelKey = attr.getValue('ID')
-       #                 if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
-        #                        self.repeatedResource = True
+    			if(identifiers > 1):
+				self.repeatedResource = False
 
         def characters (self, ch):
-  #              if (self.isDomain == True and self.repeatedResource == False):
-   #                     self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
                 if (self.isEntry == True and self.repeatedResource == False):
-                        self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
-
-        def endElement(self, name):
+			#self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey].append( ch)
+        		self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
+	def endElement(self, name):
                 if name == 'RESOURCE':
                         self.isResource = False
+	#		self.initializeList = True
                 elif name == 'ENTRY':
                         self.isEntry = False
                         self.repeatedResource = False
-#                elif name == 'DOMAIN':
- #                       self.isDomain = False
- #                       self.repeatedResource = False
         def getResources(self):
                 return self.collectedResources
-
-	
 
 
 class MDSResourceException(Exception):
@@ -170,8 +167,53 @@ class MDSResourceQuery(Loggable):
 			self.logger.error("Failed to parse retrieved XML: "+e.getMessage())	
 			#sys.exit(1)
 			raise MDSResourceException("Failed to parse retrieved XML: "+e.getMessage())
+		self.postProcessing(xmlHandler.getResources())
 
 		return xmlHandler.getResources()
+
+
+	def postProcessing(self, resources):
+		# OK, so I need to covert the "NetPools" information into an "availble" slots idea 
+		utilizedIPs = resources.keys()
+		print utilizedIPs
+		queue = []
+		totalIPs = []
+		foundNetPools = False
+		for entry in utilizedIPs:
+			secondLevel= resources[entry].keys()
+			#queue = []
+			for secondEntry in secondLevel:
+				if(secondEntry.find("NetPools")!=-1 and secondEntry !=("NetPools:Totals")):
+					queue.append(secondEntry)
+					# Yes this is evaluated multiple times...
+					foundNetPools = True
+			#print queue
+			if(foundNetPools):
+				for queueItem in queue:
+					totalIPs.append(resources[entry][queueItem])
+					del(resources[entry][queueItem])
+				#print totalIPs
+				foundNetPools = False 
+		#print totalIPs
+		filterSet = set()
+
+		for entry in totalIPs:
+			filterSet.add(entry.keys()[0])
+		#print filterSet
+		pools ={}
+		for entry in filterSet:
+			pools[entry]=[]
+
+		for entry in totalIPs:
+			pools[entry.keys()[0]].append(entry.values()[0])	
+		print pools	
+		#for entry in pools.keys():
+		for ip in utilizedIPs:
+			for key in pools.keys():
+				if ip in pools[key]:
+					pools[key].remove(ip)
+
+		print pools
 
 
 myQuery = MDSResourceQuery()

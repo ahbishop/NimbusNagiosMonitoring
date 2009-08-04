@@ -107,15 +107,15 @@ class PluginCmdLineOpts(PluginObject):
 		#sys.stdout.write( "This should show up\n")
                 #The following options are parsed to conform with Nagios Plug-In "standard practices"
 
-                parser.add_option("-V","--version",dest="version", \
-                        action="store_false", help="Diplay version information",default=True)
-                parser.add_option("-v","--verbose",dest="verbosity",help="Set verbosity level (0-3)",default=0)
+                #parser.add_option("-V","--version",dest="version", \
+                 #       action="store_false", help="Diplay version information",default=True)
+                #parser.add_option("-v","--verbose",dest="verbosity",help="Set verbosity level (0-3)",default=0)
                 #parser.add
 
 
-                parser.add_option("--HNcon", action="callback", callback=HeadNodeVMIPs())
-                parser.add_option("--HNvmmpool", action="callback", callback=HeadNodeVMMPools())
-                parser.add_option("--HNnetpool", action="callback", callback=HeadNodeNetPools())         
+                parser.add_option("--HNcon", action="callback",help="Verify internal database consistency", callback=HeadNodeVMIPs())
+                parser.add_option("--HNvmmpool", action="callback",help="Publish Nimbus VMM pool information", callback=HeadNodeVMMPools())
+                parser.add_option("--HNnetpool", action="callback",help="Publish Nimbus network pool information", callback=HeadNodeNetPools())         
 
 
                 self.parser = parser
@@ -132,9 +132,9 @@ class PluginCmdLineOpts(PluginObject):
                 # Parse the command line arguments and store them in 'options'
                 (options, args) = self.parser.parse_args()
 
-                if not options.version:
-                        self.logger.info('Plug-in Version #: '+ __VERSION__)
-                        print __VERSION__
+                #if not options.version:
+                #        self.logger.info('Plug-in Version #: '+ __VERSION__)
+                #        print __VERSION__
 
 #PERFORMANCE_DATA_LOC = "/tmp/service-perfdata"
 #TARGET_XML_FILE = "/tmp/mdsresource.xml"
@@ -144,7 +144,7 @@ class ResourceHandler(ContentHandler):
 	def __init__(self): 
 		 
 		self.isResource = False
-		self.isDomain = False
+		self.isEntry = False
 		self.collectedResources = {}
 		self.repeatedEntry = False
 	def startElement(self,name,attr):
@@ -158,20 +158,20 @@ class ResourceHandler(ContentHandler):
 			if(self.secondLevelKey not in self.collectedResources[self.topLevelKey].keys()):
 				self.collectedResources[self.topLevelKey][self.secondLevelKey] = {}
 			self.isResource = True
-		elif name == 'DOMAIN':
-			self.isDomain = True
+		elif name == 'ENTRY':
+			self.isEntry = True
 			self.thirdLevelKey = attr.getValue('ID')
 			if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
 				self.repeatedEntry = True
 	def characters (self, ch):
-		if self.isDomain == True and self.repeatedEntry == False:
+		if self.isEntry == True and self.repeatedEntry == False:
 			self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
 		
 	def endElement(self, name):
 		if name == 'RESOURCE':
 			self.isResource = False
-		elif name == 'DOMAIN':
-			self.isDomain = False
+		elif name == 'ENTRY':
+			self.isEntry = False
 			self.repeatedResource = False
 	def getResources(self):
 		return self.collectedResources
@@ -202,8 +202,8 @@ class ResourceHandler(ContentHandler):
 #myProc = NagiosPerfDataProcessor()
 #parsedData = myProc.parse()
 
-#IJ_LOCATION = "/opt/sun/javadb/bin/ij"
-#SQL_IP_SCRIPT = "derbyUsedIPs.sql"
+IJ_LOCATION = "/opt/sun/javadb/bin/ij"
+SQL_IP_SCRIPT = "derbyUsedIPs.sql"
 class HeadNodeVMIPs(PluginObject):
 
 	def __init__(self):
@@ -212,19 +212,11 @@ class HeadNodeVMIPs(PluginObject):
 	
 	def __call__(self, option, opt_str, value, parser):
 	
-	#	__call__()
-	
-	#def __call__(self):
-		#print "I was called"
-		IJ_LOCATION = "/opt/sun/javadb/bin/ij"
-		SQL_IP_SCRIPT = "derbyUsedIPs.sql"
-
+		isConsistent = True
 
 		query = IJ_LOCATION+ " "+SQL_IP_SCRIPT
 		status, output = commands.getstatusoutput(query)
-		#print status
-		#print "printing output from query"
-		#print output
+		
 		derbyIPs = []
 		patt = re.compile(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})") 
 		for line in output.split():
@@ -239,17 +231,19 @@ class HeadNodeVMIPs(PluginObject):
 			addr = remoteVM.keys()[0]
 			if(self.ping(addr)):
 				derbyIPs[derbyIPs.index(remoteVM)][addr] = True	
-		
+
 		for foundVM in derbyIPs:
 			# Again, there should be only 1 'value' for a given key
 			# and the 'value' is a True/False boolean
 			if not (foundVM.values()):
 				self.logger.error("Unable to reach VM via PING - "+foundVM)
+				isConsistent = False
 		# OK, so now are their reachable VMs that should be terminated?
 
 		SQL_RUNNING_VMS_SCRIPT = "derbyRunningVMs.sql"
 		query = IJ_LOCATION + " " + SQL_RUNNING_VMS_SCRIPT
 		status, output = commands.getstatusoutput(query)
+		# TODO Can I just reuse 'patt'?
 		patt = re.compile(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
 		ijOutput = output.split()
 		counter = 0
@@ -286,16 +280,20 @@ class HeadNodeVMIPs(PluginObject):
 				# Need to ping the VM to see if it's still alive
 				if(self.ping(entry["IP"])):
 					self.logger.error("VM at IP address: "+entry["IP"]+" is alive and shouldn't be!")
-		#print VMs
+					isConsistent = False
 		
-		#print derbyIPs
-		#self.logger.info("Consistency check of DerbyDB")
-		print "Consistency check of DerbyDB"
-		sys.exit(NAGIOS_RET_OK)
-		#pluginExit(self.resourceName, self.logString.getvalue(), NAGIOS_RET_OK)
+		if not (isConsistent):
+			retCode = NAGIOS_RET_CRITICAL
+		else:
+			retCode = NAGIOS_RET_OK
+		self.logger.info("Head-Node; Consistent ; "+str(isConsistent))
+		
+		pluginExit(self.resourceName, self.logString.getvalue(), retCode)
 
-#		return derbyIPs	
-		
+	# The only "tunable" paramter for this function is the number value that comes after the '-c' in the Popen
+	# command below. This is a parameter for the 'ping' command line utility and dictates the number of 'pings'
+	# sent to the target. I have it set to '1' for speed reasons, as this function is somehwat slow in terms of
+	# execution time. Adjust this value to send more pings if required		
 	def ping(self, hostaddress):
 		#print hostaddress
        
@@ -432,17 +430,47 @@ class HeadNodeNetPools(PluginObject):
 				sys.exit(NAGIOS_RET_ERROR)
 		#print totalNetPools
 		
-		for dict in totalNetPools:
-			sillyCount = 0
-			for entry in dict["NETWORK"]:
-				sillyCount +=1
+#		for dict in totalNetPools:
+#			sillyCount = 0
+#			for entry in dict["NETWORK"]:
+#				sillyCount +=1
 				#print entry
 			#print sillyCount
 			# The first entry '-' seems silly but I need a placeholder for when the XML
-			# is formatted on pluginExit to maintain homogeneity between the netPools and vmmPools code
-			self.logger.info("-"+";"+dict["ID"]+";"+ str(sillyCount))
+#			# is formatted on pluginExit to maintain homogeneity between the netPools and vmmPools code
+#			self.logger.info("-"+";"+dict["ID"]+";"+ str(sillyCount))
 
+		query = IJ_LOCATION+ " "+SQL_IP_SCRIPT
+                status, output = commands.getstatusoutput(query)
+                
+                derbyIPs = []
+                patt = re.compile(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
+                for line in output.split():
+                        myRe = patt.search(line)
+                        if(myRe):
+                                derbyIPs.append(line.strip())
+		# Dammit, what 'pool' do these IPs belong too????
+		#print derbyIPs
+		uniqueID = 0
+		for ip in derbyIPs:
+			self.logger.info("Used ; Used; "+ str(ip))
+			uniqueID = uniqueID+1
+		uniqueID = 0
+		for dict in totalNetPools:
+              	#	sillyCount = 0
+			count = len(dict["NETWORK"])
+                      
+                      
+                        #print sillyCount
+                        # The first entry '-' seems silly but I need a placeholder for when the XML
+                        # is formatted on pluginExit to maintain homogeneity between the netPools and vmmPools code
+                        #print dict["NETWORK"]
+			self.logger.info("Totals ;"+dict["ID"]+";"+ str(count))
+			for entry in dict["NETWORK"]:
+				self.logger.info(str(uniqueID)+";"+dict["ID"]+";"+str(entry[1]))	
+				uniqueID = uniqueID+1
 		pluginExit(self.resourceName, self.logString.getvalue(), NAGIOS_RET_OK)
+
 if __name__ == '__main__':
 	testObject = PluginCmdLineOpts()
 	testObject.validate()

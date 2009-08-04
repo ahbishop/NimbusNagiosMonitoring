@@ -247,12 +247,12 @@ class PluginCmdLineOpts(PluginObject):
 			action="store_false", help="Diplay version information",default=True)
 		#parser.add_option("-v","--verbose",dest="verbosity",help="Set verbosity level (0-3)",default=0)
 
-		parser.add_option("--VMmem", action="callback", callback=VMMemory())
-		parser.add_option("--VMos", action="callback", callback=VMOs())
-		parser.add_option("--VMcpuarch", action="callback", callback=VMCpuArch())		
-		parser.add_option("--VMvirt", action="callback", callback=VMVirt())
-		parser.add_option("--VMcpufreq", action="callback", callback=VMCpuFreq())
-		parser.add_option("--VMcpucores", action="callback", callback=VMCpuCores())
+		parser.add_option("--VMmem", help="Discover the of memory dedicated to each VM (in KB)", action="callback", callback=VMMemory())
+		parser.add_option("--VMos", help="Discover the OS running on each VM", action="callback", callback=VMOs())
+		parser.add_option("--VMcpuarch",help="Discover the host CPU architecture (x86 or x86_64)", action="callback", callback=VMCpuArch())		
+		parser.add_option("--VMvirt", help="Discover the host virtualization technology",action="callback", callback=VMVirt())
+		parser.add_option("--VMcpufreq",help="Discover the host CPU frequency (in Hz)", action="callback", callback=VMCpuFreq())
+		parser.add_option("--VMcpucores",help="Discover the number of host CPU cores", action="callback", callback=VMCpuCores())
 
 		self.parser = parser
 
