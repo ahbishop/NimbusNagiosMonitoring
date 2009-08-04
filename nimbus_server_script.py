@@ -67,12 +67,12 @@ def pluginExit(messageString, logString, returnCode):
 		logStringEntries = line.split(';')
 		#print logStringEntries
 		
-		outputString.write("<RESOURCE LOCATION=\""+localIP+"\" TYPE=\""+messageString+":" +logStringEntries[3].strip()+"\">")
+		outputString.write("<RES LOC=\""+localIP+"\" TYPE=\""+messageString+":" +logStringEntries[3].strip()+"\">")
 
 		outputString.write("<ENTRY ID=\""+logStringEntries[4].strip()+"\">")
 		outputString.write(logStringEntries[5].strip())
 		outputString.write("</ENTRY>")
-		outputString.write("</RESOURCE>")
+		outputString.write("</RES>")
 
 	sys.stdout.write(messageString+" | "+ outputString.getvalue()+"\n")
 	sys.exit(returnCode)
@@ -140,41 +140,41 @@ class PluginCmdLineOpts(PluginObject):
 #TARGET_XML_FILE = "/tmp/mdsresource.xml"
 
 
-class ResourceHandler(ContentHandler):
-	def __init__(self): 
+#class ResourceHandler(ContentHandler):
+#	def __init__(self): 
 		 
-		self.isResource = False
-		self.isEntry = False
-		self.collectedResources = {}
-		self.repeatedEntry = False
-	def startElement(self,name,attr):
-
-		if name == 'RESOURCE':
-			self.topLevelKey = attr.getValue('LOCATION')
-			self.secondLevelKey = attr.getValue('TYPE')
-				
-			if(self.topLevelKey not in self.collectedResources.keys()):
-				self.collectedResources[self.topLevelKey] = {}
-			if(self.secondLevelKey not in self.collectedResources[self.topLevelKey].keys()):
-				self.collectedResources[self.topLevelKey][self.secondLevelKey] = {}
-			self.isResource = True
-		elif name == 'ENTRY':
-			self.isEntry = True
-			self.thirdLevelKey = attr.getValue('ID')
-			if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
-				self.repeatedEntry = True
-	def characters (self, ch):
-		if self.isEntry == True and self.repeatedEntry == False:
-			self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
-		
-	def endElement(self, name):
-		if name == 'RESOURCE':
-			self.isResource = False
-		elif name == 'ENTRY':
-			self.isEntry = False
-			self.repeatedResource = False
-	def getResources(self):
-		return self.collectedResources
+#		self.isResource = False
+#		self.isEntry = False
+#		self.collectedResources = {}
+#		self.repeatedEntry = False
+#	def startElement(self,name,attr):
+#
+#		if name == 'RESOURCE':
+#			self.topLevelKey = attr.getValue('LOCATION')
+#			self.secondLevelKey = attr.getValue('TYPE')
+#				
+#			if(self.topLevelKey not in self.collectedResources.keys()):
+#				#self.collectedResources[self.topLevelKey] = {}
+#			if(self.secondLevelKey not in self.collectedResources[self.topLevelKey].keys()):
+#				self.collectedResources[self.topLevelKey][self.secondLevelKey] = {}
+#			self.isResource = True
+#		elif name == 'ENTRY':
+#			self.isEntry = True
+#			self.thirdLevelKey = attr.getValue('ID')
+#			if(self.thirdLevelKey in self.collectedResources[self.topLevelKey][self.secondLevelKey].keys()):
+#				self.repeatedEntry = True
+#	def characters (self, ch):
+#		if self.isEntry == True and self.repeatedEntry == False:
+#			self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
+#		
+#	def endElement(self, name):
+#$		if name == 'RESOURCE':
+#			self.isResource = False
+#		elif name == 'ENTRY':
+#			self.isEntry = False
+#			self.repeatedResource = False
+#	def getResources(self):
+#		return self.collectedResources
 		
 #def ping(hostaddress):
 	
@@ -182,7 +182,7 @@ class ResourceHandler(ContentHandler):
  #      	ping = subprocess.Popen(["ping -c 2",hostaddress],stdout = subprocess.PIPE,stderr = subprocess.PIPE)
   #     	out, error = ping.communicate()
 #	if(error != ""):
-		#self.logger.error(error)
+		##self.logger.error(error)
 #		return False
  #      	return True
 
@@ -203,7 +203,7 @@ class ResourceHandler(ContentHandler):
 #parsedData = myProc.parse()
 
 IJ_LOCATION = "/opt/sun/javadb/bin/ij"
-SQL_IP_SCRIPT = "derbyUsedIPs.sql"
+SQL_IP_SCRIPT = "/usr/local/nagios/libexec/derbyUsedIPs.sql"
 class HeadNodeVMIPs(PluginObject):
 
 	def __init__(self):
@@ -428,43 +428,25 @@ class HeadNodeNetPools(PluginObject):
 			except IOError:
 				self.logger.error("Error opening network-pool: "+GLOBUS_LOC+NIMBUS_CONF+NIMBUS_NET_CONF+"/"+pool)
 				sys.exit(NAGIOS_RET_ERROR)
-		#print totalNetPools
-		
-#		for dict in totalNetPools:
-#			sillyCount = 0
-#			for entry in dict["NETWORK"]:
-#				sillyCount +=1
-				#print entry
-			#print sillyCount
-			# The first entry '-' seems silly but I need a placeholder for when the XML
-#			# is formatted on pluginExit to maintain homogeneity between the netPools and vmmPools code
-#			self.logger.info("-"+";"+dict["ID"]+";"+ str(sillyCount))
 
 		query = IJ_LOCATION+ " "+SQL_IP_SCRIPT
-                status, output = commands.getstatusoutput(query)
-                
-                derbyIPs = []
+                output,status = (subprocess.Popen([query],stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell=True, env={'DERBY_HOME':"/opt/sun/javadb",'JAVA_HOME':"/usr/java/latest",'GLOBUS_LOCATION':"/usr/local/globus-4.0.8"})).communicate()
+		
+		derbyIPs = []
                 patt = re.compile(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
                 for line in output.split():
                         myRe = patt.search(line)
                         if(myRe):
                                 derbyIPs.append(line.strip())
-		# Dammit, what 'pool' do these IPs belong too????
-		#print derbyIPs
 		uniqueID = 0
 		for ip in derbyIPs:
-			self.logger.info("Used ; Used; "+ str(ip))
+			self.logger.info("Used:"+str(uniqueID)+ " ; Used; "+ str(ip))
 			uniqueID = uniqueID+1
 		uniqueID = 0
 		for dict in totalNetPools:
-              	#	sillyCount = 0
 			count = len(dict["NETWORK"])
                       
                       
-                        #print sillyCount
-                        # The first entry '-' seems silly but I need a placeholder for when the XML
-                        # is formatted on pluginExit to maintain homogeneity between the netPools and vmmPools code
-                        #print dict["NETWORK"]
 			self.logger.info("Totals ;"+dict["ID"]+";"+ str(count))
 			for entry in dict["NETWORK"]:
 				self.logger.info(str(uniqueID)+";"+dict["ID"]+";"+str(entry[1]))	

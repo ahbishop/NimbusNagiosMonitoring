@@ -57,8 +57,8 @@ class ResourceHandler(ContentHandler):
                 self.repeatedResource = False
         def startElement(self,name,attr):
 
-                if name == 'RESOURCE':
-                        self.topLevelKey = attr.getValue('LOCATION')
+                if name == 'RES':
+                        self.topLevelKey = attr.getValue('LOC')
                         self.secondLevelKey = attr.getValue('TYPE')
 
                         if(self.topLevelKey not in self.collectedResources.keys()):
@@ -85,7 +85,7 @@ class ResourceHandler(ContentHandler):
 			#self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey].append( ch)
         		self.collectedResources[self.topLevelKey][self.secondLevelKey][self.thirdLevelKey] = ch
 	def endElement(self, name):
-                if name == 'RESOURCE':
+                if name == 'RES':
                         self.isResource = False
 	#		self.initializeList = True
                 elif name == 'ENTRY':
@@ -174,7 +174,10 @@ class MDSResourceQuery(Loggable):
 
 	def postProcessing(self, resources):
 		# OK, so I need to covert the "NetPools" information into an "availble" slots idea 
+		# TODO THese are the WRONG IPs - they represent the physical node, not the VM
 		utilizedIPs = resources.keys()
+		
+
 		print utilizedIPs
 		queue = []
 		totalIPs = []
@@ -191,7 +194,8 @@ class MDSResourceQuery(Loggable):
 			if(foundNetPools):
 				for queueItem in queue:
 					totalIPs.append(resources[entry][queueItem])
-					del(resources[entry][queueItem])
+				# TODO uncomment below when not debugging
+				#	del(resources[entry][queueItem])
 				#print totalIPs
 				foundNetPools = False 
 		#print totalIPs
