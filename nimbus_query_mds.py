@@ -175,14 +175,25 @@ class MDSResourceQuery(Loggable):
 	def postProcessing(self, resources):
 		# OK, so I need to covert the "NetPools" information into an "availble" slots idea 
 		# TODO THese are the WRONG IPs - they represent the physical node, not the VM
-		utilizedIPs = resources.keys()
-		
+		#utilizedIPs = resources.keys()
+		utilizedIPs = []
 
 		print utilizedIPs
 		queue = []
 		totalIPs = []
 		foundNetPools = False
-		for entry in utilizedIPs:
+
+		physicalIPs = resources.keys()
+		queueTwo = []
+		for entry in physicalIPs:
+			secondLevel = resources[entry].keys()
+			for secondEntry in secondLevel:
+			#	print secondEntry
+				if(secondEntry.find("NetPools:Used")!=-1):
+					queueTwo.append(resources[entry][secondEntry]["Used"])
+		#print queueTwo	
+		netPoolsIP = ""
+		for entry in physicalIPs:
 			secondLevel= resources[entry].keys()
 			#queue = []
 			for secondEntry in secondLevel:
@@ -190,15 +201,20 @@ class MDSResourceQuery(Loggable):
 					queue.append(secondEntry)
 					# Yes this is evaluated multiple times...
 					foundNetPools = True
+					netPoolsIP = entry
+				#elif (secondEntry.find(":Used") !=-1):
+				#	utilizedIPs.append(secondEntry)
 			#print queue
 			if(foundNetPools):
 				for queueItem in queue:
 					totalIPs.append(resources[entry][queueItem])
 				# TODO uncomment below when not debugging
-				#	del(resources[entry][queueItem])
+					del(resources[entry][queueItem])
 				#print totalIPs
 				foundNetPools = False 
+		#print utilizedIPs
 		#print totalIPs
+		#print queue
 		filterSet = set()
 
 		for entry in totalIPs:
@@ -211,13 +227,19 @@ class MDSResourceQuery(Loggable):
 		for entry in totalIPs:
 			pools[entry.keys()[0]].append(entry.values()[0])	
 		print pools	
-		#for entry in pools.keys():
-		for ip in utilizedIPs:
+		
+		for ip in queueTwo:
 			for key in pools.keys():
 				if ip in pools[key]:
 					pools[key].remove(ip)
 
+		del(pools["Used"])
 		print pools
+		resources[netPoolsIP]["NetPools:Available"] = {}
+		for pool in pools.keys():
+			resources[netPoolsIP]["NetPools:Available"][pool] = len(pools[pool])
+
+		print netPoolsIP
 
 
 myQuery = MDSResourceQuery()
