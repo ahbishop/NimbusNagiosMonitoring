@@ -58,7 +58,7 @@ def pluginExit(messageString, logString, returnCode):
 	# TODO - Add error handling!
 	localIP = (socket.gethostbyaddr( socket.gethostname() ))[2][0]
 	
-	resourceString = "<RESOURCE LOCATION=\""+ localIP+"\" TYPE=\""+messageString+"\">"
+	resourceString = "<RES LOC=\""+ localIP+"\" TYPE=\""+messageString+"\">"
 	outputString.write(resourceString)
 	lines = logString.splitlines()
 	for line in lines:
@@ -72,7 +72,7 @@ def pluginExit(messageString, logString, returnCode):
 
 		outputString.write(logStringEntries[5].strip())
 		outputString.write("</ENTRY>")
-	outputString.write("</RESOURCE>")
+	outputString.write("</RES>")
 
 
 	print messageString+" | "+ outputString.getvalue()
@@ -148,6 +148,9 @@ class Virtualized(PluginObject):
                 for id in self.VMDomainsID:
                         #So, the VMs 'dictionary' stores virDomain (libvirt) objects
                         try:
+				# Skip over Dom0 or Domain-0 (hypervisor)
+				if(id == 0):
+					continue
 				self.VMs[id] = (self.VMConnection.lookupByID(id))
 			except:
 				self.logger.error("Failed to lookup a VM from a VMConnection by \'id\'")
@@ -234,6 +237,27 @@ class VMOs(Virtualized):
 
 		pluginExit(self.resourceName, self.logString.getvalue(), NAGIOS_RET_OK)
 		
+class VMFreeMem(Virtualized):
+
+	def __init__(self):
+		Virtualized.__init__(self)
+		self.resourceName = "VM-FreeMemory"
+
+	def __call__(self,option,opt_str,value,parser):
+		usedMemory = 0
+		for vm in self.VMs.values():
+                        #self.logger.info(vm.name()+' ; '+self.resourceName+ " ; %d", vm.maxMemory())
+			usedMemory = usedMemory + vm.maxMemory()
+
+		tempRes = self.VMConnection.getInfo()
+		totalMem = int(tempRes[1])*1024
+		
+		availableMem =totalMem -usedMemory
+		self.logger.info(self.VMConnection.getHostname()+';'+self.resourceName+';'+str(availableMem))
+
+                pluginExit(self.resourceName, self.logString.getvalue(), NAGIOS_RET_OK)
+
+
 
 class PluginCmdLineOpts(PluginObject):
 
@@ -253,6 +277,7 @@ class PluginCmdLineOpts(PluginObject):
 		parser.add_option("--VMvirt", help="Discover the host virtualization technology",action="callback", callback=VMVirt())
 		parser.add_option("--VMcpufreq",help="Discover the host CPU frequency (in Hz)", action="callback", callback=VMCpuFreq())
 		parser.add_option("--VMcpucores",help="Discover the number of host CPU cores", action="callback", callback=VMCpuCores())
+		parser.add_option("--VMfreemem",help="Discover the amount of free/unsed memory of host",action="callback",callback=VMFreeMem())
 
 		self.parser = parser
 

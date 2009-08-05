@@ -214,9 +214,12 @@ class HeadNodeVMIPs(PluginObject):
 	
 		isConsistent = True
 
+		#query = IJ_LOCATION+ " "+SQL_IP_SCRIPT
+		#status, output = commands.getstatusoutput(query)
 		query = IJ_LOCATION+ " "+SQL_IP_SCRIPT
-		status, output = commands.getstatusoutput(query)
-		
+                output,status = (subprocess.Popen([query],stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell=True, env={'DERBY_HOME':"/opt/sun/javadb",'JAVA_HOME':"/usr/java/latest",'GLOBUS_LOCATION':"/usr/local/globus-4.0.8"})).communicate()
+
+
 		derbyIPs = []
 		patt = re.compile(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})") 
 		for line in output.split():
@@ -242,7 +245,11 @@ class HeadNodeVMIPs(PluginObject):
 
 		SQL_RUNNING_VMS_SCRIPT = "derbyRunningVMs.sql"
 		query = IJ_LOCATION + " " + SQL_RUNNING_VMS_SCRIPT
-		status, output = commands.getstatusoutput(query)
+		#status, output = commands.getstatusoutput(query)
+		output,status = (subprocess.Popen([query],stdout = subprocess.PIPE, stderr = subprocess.PIPE, shell=True, env={'DERBY_HOME':"/opt/sun/javadb",'JAVA_HOME':"/usr/java/latest",'GLOBUS_LOCATION':"/usr/local/globus-4.0.8"})).communicate()
+
+
+
 		# TODO Can I just reuse 'patt'?
 		patt = re.compile(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
 		ijOutput = output.split()
