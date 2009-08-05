@@ -167,79 +167,87 @@ class MDSResourceQuery(Loggable):
 			self.logger.error("Failed to parse retrieved XML: "+e.getMessage())	
 			#sys.exit(1)
 			raise MDSResourceException("Failed to parse retrieved XML: "+e.getMessage())
-		self.postProcessing(xmlHandler.getResources())
+		self.netPoolProcessing(xmlHandler.getResources())
 
 		return xmlHandler.getResources()
 
 
-	def postProcessing(self, resources):
+	def netPoolProcessing(self, resources):
 		# OK, so I need to covert the "NetPools" information into an "availble" slots idea 
-		# TODO THese are the WRONG IPs - they represent the physical node, not the VM
-		#utilizedIPs = resources.keys()
-		utilizedIPs = []
 
-		print utilizedIPs
 		queue = []
 		totalIPs = []
+		# This boolean is used so that the logic below only executes once
 		foundNetPools = False
 
+		# The top level of the resources structure is the IP addresses that reported resources
 		physicalIPs = resources.keys()
-		queueTwo = []
-		for entry in physicalIPs:
-			secondLevel = resources[entry].keys()
-			for secondEntry in secondLevel:
-			#	print secondEntry
+		usedQueue = []
+
+		# This loop is for finding the NetPools:Used entries only
+		for ip in physicalIPs:
+			uniqueIDs = resources[ip].keys()
+			for secondEntry in uniqueIDs:
+				# if the 'NetPools:Used' ID is found...
 				if(secondEntry.find("NetPools:Used")!=-1):
-					queueTwo.append(resources[entry][secondEntry]["Used"])
-		#print queueTwo	
+					usedQueue.append(resources[ip][secondEntry]["Used"])
 		netPoolsIP = ""
-		for entry in physicalIPs:
-			secondLevel= resources[entry].keys()
-			#queue = []
-			for secondEntry in secondLevel:
+		for ip in physicalIPs:
+			# 'uniqueIDs' is the text description of the resource being reported
+			uniqueIDs = resources[ip].keys()
+			for secondEntry in uniqueIDs:
+				# Since the 'NetPools' description is re-used (with additional unique IDs)
+				# the 'foundNetPools' guard boolean is needed in this logic
 				if(secondEntry.find("NetPools")!=-1 and secondEntry !=("NetPools:Totals")):
 					queue.append(secondEntry)
-					# Yes this is evaluated multiple times...
+					# Yes this assignment is evaluated multiple times, but it's fine how it is
 					foundNetPools = True
-					netPoolsIP = entry
-				#elif (secondEntry.find(":Used") !=-1):
-				#	utilizedIPs.append(secondEntry)
-			#print queue
+					# This value will be needed later on when "inserting" the available addresses
+					# into the 'resources' data structure
+					netPoolsIP = ip
+			# Since this code blindly loops over all entries, the boolean 'foundNetPools' guard is needed 
+			# to prevent dictionary insertion errors for the physicalIPs that don't include 'NetPools' resources
+			# Only 1 IP address should be reporting 'NetPools' resources
 			if(foundNetPools):
-				for queueItem in queue:
-					totalIPs.append(resources[entry][queueItem])
-				# TODO uncomment below when not debugging
-					del(resources[entry][queueItem])
-				#print totalIPs
+				for item in queue:
+					totalIPs.append(resources[ip][item])
+					del(resources[ip][item])
+				# 'toggle' the boolean off, as only 1 ip address should include 'NetPools' resources
 				foundNetPools = False 
-		#print utilizedIPs
-		#print totalIPs
-		#print queue
+		# Using a set() to filter out duplicat 'pool names' that are encountered in the data structure
 		filterSet = set()
 
 		for entry in totalIPs:
+			# There should only ever be 1 entry in the keys() list, hence the [0] to extract it
 			filterSet.add(entry.keys()[0])
-		#print filterSet
+		
+		# filterSet now contains the pool names
 		pools ={}
+		# Initialize lists for every pool name found
 		for entry in filterSet:
 			pools[entry]=[]
 
 		for entry in totalIPs:
+			# both the 'keys()' and 'values()' should return a list of 1 item, so the [0] to extract it 
 			pools[entry.keys()[0]].append(entry.values()[0])	
-		print pools	
+		#print pools	
 		
-		for ip in queueTwo:
+		for ip in usedQueue:
 			for key in pools.keys():
 				if ip in pools[key]:
+					# This removes the address from ALL the pools, even Used
 					pools[key].remove(ip)
 
+		# Remove the USED mapping as it is no longer required
 		del(pools["Used"])
-		print pools
+		#print pools
+		
+		# Insert the "NetPoolsAvailable" resource into the 'resources' data structure
 		resources[netPoolsIP]["NetPools:Available"] = {}
 		for pool in pools.keys():
 			resources[netPoolsIP]["NetPools:Available"][pool] = len(pools[pool])
 
-		print netPoolsIP
+		#print netPoolsIP
 
 
 myQuery = MDSResourceQuery()
